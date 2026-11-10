@@ -134,3 +134,106 @@ The package stores only a hash of each OTP in Redis. By default, keys use these 
 - `cotp:<ID>:<unix-milliseconds>` for `COTP` or `<custom_prefix>:cotp:<ID>:<unix-milliseconds>` if `custom_prefix` is provided
 
 When `CustomPrefix` is set, it is prepended, for example `my-app:sotp:user-123`. The configured duration is also used as the Redis key expiration.
+
+## Setup Code
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	rajangotp "github.com/bimonugraraga/rajang-otp"
+	"github.com/redis/go-redis/v9"
+)
+
+func main() {
+	// Generate Numeric OTP
+	otp, err := rajangotp.GenerateNumericOTP(6)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Generate Numeric OTP:", otp)
+
+	// Generate Alphanumeric OTP
+	otp, err = rajangotp.GenerateAlphanumericOTP(6)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Generate Alphanumeric OTP:", otp)
+
+	// Prepare Redis client
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+
+	fmt.Println("--------------------------------------------------")
+	fmt.Println("Generate and Validate SOTP with Redis")
+	// Generate and Validate SOTP
+	sotpStruct := &rajangotp.SOTP{
+		RedisClient:       rdb,
+		ID:                "test",
+		Length:            6,
+		IsAlphaNumeric:    true,
+		DurationInSeconds: 300,
+		CustomPrefix:      "rajang-otp",
+		Salt:              "rajang",
+	}
+	ctx := context.Background()
+	otp, err = sotpStruct.GenerateAndSaveSOTP(ctx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("SOTP:", otp)
+	time.Sleep(2 * time.Second) // Wait for 2 seconds before validating
+
+	// Validate SOTP
+	sotpStruct2 := &rajangotp.SOTP{
+		RedisClient:  rdb,
+		ID:           "test",
+		CustomPrefix: "rajang-otp",
+		Salt:         "rajang",
+	}
+	isValid, err := sotpStruct2.ValidateSOTP(ctx, otp)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("SOTP is valid:", isValid)
+	time.Sleep(2 * time.Second) // Wait for 2 seconds before validating
+
+	// Generate and Validate COTP
+	fmt.Println("--------------------------------------------------")
+	fmt.Println("Generate and Validate COTP with Redis")
+	cotpStruct := &rajangotp.COTP{
+		RedisClient:       rdb,
+		ID:                "test",
+		Length:            6,
+		IsAlphaNumeric:    true,
+		DurationInSeconds: 300,
+		CustomPrefix:      "rajang-otp",
+		MaxConcurrentOTPs: 5,
+		Salt:              "rajang",
+	}
+	otp, err = cotpStruct.GenerateAndSaveCOTP(ctx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("COTP:", otp)
+	time.Sleep(2 * time.Second) // Wait for 2 seconds before validating
+
+	//Validate COTP
+	cotpStruct2 := &rajangotp.COTP{
+		RedisClient:  rdb,
+		ID:           "test",
+		CustomPrefix: "rajang-otp",
+		Salt:         "rajang",
+	}
+	isValid, err = cotpStruct2.ValidateCOTP(ctx, otp)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("COTP is valid:", isValid)
+}
+
+```
